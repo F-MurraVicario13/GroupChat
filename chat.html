@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Chat</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-white shadow-sm p-4">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-4">
+                <h1 class="text-2xl font-bold text-gray-800">Chat Room</h1>
+                <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                    Online: <span id="online-count">0</span>
+                </span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="text-gray-600">Welcome, <span id="username" class="font-semibold"></span></span>
+                <button onclick="logout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
+                    Logout
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Chat Area -->
+    <main class="flex-1 max-w-6xl mx-auto w-full p-4 flex flex-col gap-4">
+        <!-- Chat Messages -->
+        <div id="messages" class="flex-1 bg-white rounded-lg shadow p-4 overflow-y-auto space-y-4">
+            <!-- Messages will be inserted here dynamically -->
+        </div>
+
+        <!-- Input Area -->
+        <div class="bg-white rounded-lg shadow p-4">
+            <form id="message-form" class="flex gap-4">
+                <input 
+                    type="text" 
+                    id="message-input"
+                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="Type your message..."
+                    autocomplete="off"
+                >
+                <button 
+                    type="submit"
+                    class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                >
+                    <span>Send</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        // Initialize Socket.IO connection
+        const socket = io();
+        const messages = document.getElementById('messages');
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message-input');
+        const onlineCount = document.getElementById('online-count');
+        let connectedUsers = new Set();
+
+        // Update username display
+        document.getElementById('username').textContent = '{{ username }}';
+
+        // Socket event handlers
+        socket.on('connect', () => {
+            addSystemMessage('Connected to chat');
+        });
+
+        socket.on('disconnect', () => {
+            addSystemMessage('Disconnected from chat');
+        });
+
+        socket.on('user_joined', (data) => {
+            connectedUsers.add(data.username);
+            onlineCount.textContent = connectedUsers.size;
+            addSystemMessage(`${data.username} joined the chat`);
+        });
+
+        socket.on('user_left', (data) => {
+            connectedUsers.delete(data.username);
+            onlineCount.textContent = connectedUsers.size;
+            addSystemMessage(`${data.username} left the chat`);
+        });
+
+        socket.on('new_message', (data) => {
+            addMessage(data.username, data.message);
+        });
+
+        // Form submission handler
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = messageInput.value.trim();
+            if (message) {
+                socket.emit('send_message', { message });
+                messageInput.value = '';
+            }
+        });
+
+        // Message display functions
+        function addMessage(username, message) {
+            const isCurrentUser = username === '{{ username }}';
+            const div = document.createElement('div');
+            
+            div.className = `flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`;
+            div.innerHTML = `
+                <div class="max-w-[80%] ${isCurrentUser ? 'bg-blue-500 text-white' : 'bg-gray-100'} rounded-lg px-4 py-2 shadow">
+                    <div class="text-sm font-semibold mb-1">${username}</div>
+                    <div class="break-words">${message}</div>
+                </div>
+            `;
+            
+            messages.appendChild(div);
+            scrollToBottom();
+        }
+
+        function addSystemMessage(message) {
+            const div = document.createElement('div');
+            div.className = 'flex justify-center';
+            div.innerHTML = `
+                <div class="bg-gray-200 text-gray-600 text-sm px-4 py-1 rounded-full">
+                    ${message}
+                </div>
+            `;
+            messages.appendChild(div);
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function logout() {
+            fetch('/logout')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.reload();
+                    }
+                });
+        }
+
+        // Handle enter key press
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                messageForm.dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
+</body>
+</html>
